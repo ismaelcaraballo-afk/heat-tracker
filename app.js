@@ -69,6 +69,7 @@ async function handleSearch(e) {
   if (e) e.preventDefault();
   const input = $('search-input').value.trim();
   if (!input) return;
+  console.log("Searching for:", input);
 
   $('search-btn').disabled = true;
   $('search-btn').textContent = 'Searching...';
