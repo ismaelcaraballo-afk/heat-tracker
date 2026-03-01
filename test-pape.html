@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pape Data Layer — Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: monospace; background: #111; color: #ddd; padding: 2rem; font-size: 13px; }
+    h1 { color: #e94560; margin-bottom: 1rem; font-size: 1.2rem; }
+    h2 { color: #888; font-size: 0.95rem; margin: 1.5rem 0 0.5rem; border-bottom: 1px solid #333; padding-bottom: 0.3rem; }
+    .test { margin-bottom: 1rem; }
+    .test-name { color: #6ab; margin-bottom: 0.3rem; }
+    .test-result { background: #1a1a1a; padding: 0.8rem; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    .ok { border-left: 4px solid #2e7d32; }
+    .err { border-left: 4px solid #c62828; color: #f48; }
+    .loading { color: #888; }
+    #run { padding: 0.5rem 1.5rem; background: #e94560; border: none; color: #fff; cursor: pointer; border-radius: 6px; font-weight: 700; margin-bottom: 1rem; }
+    #run:hover { background: #c0392b; }
+    #run:disabled { background: #555; cursor: wait; }
+  </style>
+</head>
+<body>
+  <h1>Pape Data Layer — Function Tests</h1>
+  <p style="color:#666; margin-bottom:1rem;">Runs all data-pape.js functions against live NYC Open Data APIs.</p>
+  <button id="run">Run All Tests</button>
+
+  <div id="results"></div>
+
+  <script src="data-ismael.js"></script>
+  <script src="data-pape.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const tests = [
+      { name: 'dhsLatest()', fn: () => dhsLatest() },
+      { name: 'dhsTrend(12)', fn: () => dhsTrend(12) },
+      { name: 'dhsPeakVsNow()', fn: () => dhsPeakVsNow() },
+      { name: 'nychaByClass()', fn: () => nychaByClass() },
+      { name: 'nychaWorstDevelopments(10)', fn: () => nychaWorstDevelopments(10) },
+      { name: 'nychaByType(10)', fn: () => nychaByType(10) },
+      { name: 'nychaTrend()', fn: () => nychaTrend() },
+      { name: 'shelterWorstLandlords(10)', fn: () => shelterWorstLandlords(10) },
+      { name: 'shelterViolationsByAgency()', fn: () => shelterViolationsByAgency() },
+      { name: 'shelterWorstBuildings(10)', fn: () => shelterWorstBuildings(10) },
+      { name: 'getPapeHeroStats()', fn: () => getPapeHeroStats() }
+    ];
+
+    function format(val) {
+      if (val === null || val === undefined) return 'null';
+      if (typeof val === 'object') return JSON.stringify(val, null, 2);
+      return String(val);
+    }
+
+    async function runTests() {
+      const container = $('results');
+      container.innerHTML = '';
+      $('run').disabled = true;
+
+      for (const t of tests) {
+        const div = document.createElement('div');
+        div.className = 'test';
+        div.innerHTML = `
+          <div class="test-name">${t.name}</div>
+          <div class="test-result loading">Running…</div>
+        `;
+        container.appendChild(div);
+        const resultEl = div.querySelector('.test-result');
+
+        try {
+          const data = await t.fn();
+          resultEl.textContent = format(data);
+          resultEl.className = 'test-result ok';
+        } catch (err) {
+          resultEl.textContent = `ERROR: ${err.message}`;
+          resultEl.className = 'test-result err';
+          console.error(t.name, err);
+        }
+      }
+
+      $('run').disabled = false;
+    }
+
+    $('run').addEventListener('click', runTests);
+  </script>
+</body>
+</html>

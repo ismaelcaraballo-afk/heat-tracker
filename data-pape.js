@@ -79,24 +79,24 @@ async function dhsPeakVsNow() {
 /** NYCHA violations by class — Class C = immediately hazardous */
 async function nychaByClass() {
   const raw = await q(NYCHA_API, {
-    "$select": "class, count(*) as total",
-    "$group": "class",
+    "$select": "hzrd_clas, count(viol_seq_no) as total",
+    "$group": "hzrd_clas",
     "$order": "total DESC"
   });
-  return raw.map(r => ({ class: r.class, total: parseInt(r.total) }));
+  return raw.map(r => ({ class: r.hzrd_clas, total: parseInt(r.total) }));
 }
 
 /** NYCHA violations by development — worst buildings */
 async function nychaWorstDevelopments(limit = 10) {
   const raw = await q(NYCHA_API, {
-    "$select": "development, count(*) as total, " +
-      "sum(case(class='C',1,true,0)) as class_c",
-    "$group": "development",
+    "$select": "development_name, count(viol_seq_no) as total, " +
+      "sum(case(hzrd_clas='C',1,true,0)) as class_c",
+    "$group": "development_name",
     "$order": "total DESC",
     "$limit": limit
   });
   return raw.map(r => ({
-    development: r.development,
+    development: r.development_name,
     total: parseInt(r.total),
     classC: parseInt(r.class_c || 0)
   }));
@@ -105,14 +105,14 @@ async function nychaWorstDevelopments(limit = 10) {
 /** NYCHA violations by type — what's actually broken */
 async function nychaByType(limit = 10) {
   const raw = await q(NYCHA_API, {
-    "$select": "novdescription, class, count(*) as total",
-    "$group": "novdescription, class",
+    "$select": "viol_desc, hzrd_clas, count(viol_seq_no) as total",
+    "$group": "viol_desc, hzrd_clas",
     "$order": "total DESC",
     "$limit": limit
   });
   return raw.map(r => ({
-    description: r.novdescription,
-    class: r.class,
+    description: r.viol_desc,
+    class: r.hzrd_clas,
     total: parseInt(r.total)
   }));
 }
@@ -120,8 +120,8 @@ async function nychaByType(limit = 10) {
 /** NYCHA violations trend — are things getting better or worse? */
 async function nychaTrend() {
   const raw = await q(NYCHA_API, {
-    "$select": "date_extract_y(inspectiondate) as yr, count(*) as total, " +
-      "sum(case(class='C',1,true,0)) as class_c",
+    "$select": "date_extract_y(insp_dt) as yr, count(viol_seq_no) as total, " +
+      "sum(case(hzrd_clas='C',1,true,0)) as class_c",
     "$group": "yr",
     "$order": "yr DESC",
     "$limit": 10
@@ -135,66 +135,94 @@ async function nychaTrend() {
 
 // ========== SHELTER REPAIR SCORECARD ==========
 // Note: data only goes through Dec 2022 — stale but still tells a story
+// Schema (2025): monthly priority columns (highpriority_open_monthly_hpd, etc.) — values are text, so we fetch & aggregate in JS
+
+const SCORECARD_OPEN_COLS = [
+  "highpriority_open_monthly_dob", "highpriority_open_monthly_hpd", "highpriority_open_monthly_fdny", "highpriority_open_monthly_dohmh",
+  "mediumpriority_open_monthly_dob", "mediumpriority_open_monthly_hpd", "mediumpriority_open_monthly_fdny", "mediumpriority_open_monthly_dohmh",
+  "lowestpriority_open_monthly_dob", "lowestpriority_open_monthly_hpd", "lowestpriority_open_monthly_fdny", "lowestpriority_open_monthly_dohmh",
+  "commissionerorder_open_monthly_dob", "commissionerorder_open_monthly_hpd", "commissionerorder_open_monthly_fdny", "commissionerorder_open_monthly_dohmh"
+];
+
+function scorecardRowTotal(r) {
+  return SCORECARD_OPEN_COLS.reduce((s, col) => s + (parseInt(r[col]) || 0), 0);
+}
+
+function scorecardRowByAgency(r) {
+  return {
+    hpd: (parseInt(r.highpriority_open_monthly_hpd) || 0) + (parseInt(r.mediumpriority_open_monthly_hpd) || 0) + (parseInt(r.lowestpriority_open_monthly_hpd) || 0) + (parseInt(r.commissionerorder_open_monthly_hpd) || 0),
+    dob: (parseInt(r.highpriority_open_monthly_dob) || 0) + (parseInt(r.mediumpriority_open_monthly_dob) || 0) + (parseInt(r.lowestpriority_open_monthly_dob) || 0) + (parseInt(r.commissionerorder_open_monthly_dob) || 0),
+    fdny: (parseInt(r.highpriority_open_monthly_fdny) || 0) + (parseInt(r.mediumpriority_open_monthly_fdny) || 0) + (parseInt(r.lowestpriority_open_monthly_fdny) || 0) + (parseInt(r.commissionerorder_open_monthly_fdny) || 0),
+    dohmh: (parseInt(r.highpriority_open_monthly_dohmh) || 0) + (parseInt(r.mediumpriority_open_monthly_dohmh) || 0) + (parseInt(r.lowestpriority_open_monthly_dohmh) || 0) + (parseInt(r.commissionerorder_open_monthly_dohmh) || 0)
+  };
+}
+
+/** Fetch all scorecard rows (paginated) — used by shelter functions */
+async function fetchScorecardRows() {
+  const select = ["landlord", "borough", "dhs_bld_id", "shelter_name_all", ...SCORECARD_OPEN_COLS].join(", ");
+  const rows = [];
+  let offset = 0;
+  const limit = 50000;
+  let batch;
+  do {
+    batch = await q(SCORECARD_API, { "$select": select, "$limit": limit, "$offset": offset });
+    rows.push(...batch);
+    offset += batch.length;
+  } while (batch.length === limit);
+  return rows;
+}
 
 /** Top landlords by open violations across DHS shelters */
 async function shelterWorstLandlords(limit = 10) {
-  const raw = await q(SCORECARD_API, {
-    "$select": "landlord, count(*) as buildings, " +
-      "sum(total_open_violations) as total_viol",
-    "$where": "landlord IS NOT NULL",
-    "$group": "landlord",
-    "$order": "buildings DESC",
-    "$limit": 50
-  });
-  return raw
-    .map(r => ({
-      landlord: r.landlord,
-      buildings: parseInt(r.buildings || 0),
-      totalViolations: parseInt(r.total_viol || 0)
-    }))
+  const raw = await fetchScorecardRows();
+  const byLandlord = {};
+  for (const r of raw) {
+    if (!r.landlord) continue;
+    if (!byLandlord[r.landlord]) byLandlord[r.landlord] = { buildings: new Set(), totalViolations: 0 };
+    byLandlord[r.landlord].buildings.add(r.dhs_bld_id);
+    byLandlord[r.landlord].totalViolations += scorecardRowTotal(r);
+  }
+  return Object.entries(byLandlord)
+    .map(([landlord, v]) => ({ landlord, buildings: v.buildings.size, totalViolations: v.totalViolations }))
     .sort((a, b) => b.totalViolations - a.totalViolations)
     .slice(0, limit);
 }
 
 /** Shelter violations by agency — who's citing what */
 async function shelterViolationsByAgency() {
-  const raw = await q(SCORECARD_API, {
-    "$select": "sum(total_open_violations) as total, " +
-      "sum(open_hpd_violations) as hpd, " +
-      "sum(open_dob_violations) as dob, " +
-      "sum(open_fdny_violations) as fdny, " +
-      "sum(open_dohmh_violations) as dohmh",
-    "$limit": 1
-  });
-  if (!raw.length) return null;
-  const r = raw[0];
-  return {
-    total: parseInt(r.total || 0),
-    hpd: parseInt(r.hpd || 0),
-    dob: parseInt(r.dob || 0),
-    fdny: parseInt(r.fdny || 0),
-    dohmh: parseInt(r.dohmh || 0)
-  };
+  const raw = await fetchScorecardRows();
+  const totals = { total: 0, hpd: 0, dob: 0, fdny: 0, dohmh: 0 };
+  for (const r of raw) {
+    const t = scorecardRowTotal(r);
+    const a = scorecardRowByAgency(r);
+    totals.total += t;
+    totals.hpd += a.hpd;
+    totals.dob += a.dob;
+    totals.fdny += a.fdny;
+    totals.dohmh += a.dohmh;
+  }
+  return totals;
 }
 
 /** Shelter scorecard — worst individual buildings */
 async function shelterWorstBuildings(limit = 10) {
-  const raw = await q(SCORECARD_API, {
-    "$select": "building_address, landlord, borough, " +
-      "total_open_violations, open_hpd_violations, open_dob_violations, " +
-      "highpriority_open_monthly_hpd",
-    "$order": "total_open_violations DESC",
-    "$limit": limit
-  });
-  return raw.map(r => ({
-    address: r.building_address,
-    landlord: r.landlord,
-    borough: r.borough,
-    totalViolations: parseInt(r.total_open_violations || 0),
-    hpdViolations: parseInt(r.open_hpd_violations || 0),
-    dobViolations: parseInt(r.open_dob_violations || 0),
-    highPriorityHPD: parseInt(r.highpriority_open_monthly_hpd || 0)
-  }));
+  const raw = await fetchScorecardRows();
+  const byBuilding = {};
+  for (const r of raw) {
+    const id = r.dhs_bld_id || r.shelter_name_all;
+    if (!id) continue;
+    if (!byBuilding[id]) byBuilding[id] = { address: r.shelter_name_all, landlord: r.landlord, borough: r.borough, totalViolations: 0, hpdViolations: 0, dobViolations: 0, highPriorityHPD: 0 };
+    const t = scorecardRowTotal(r);
+    const a = scorecardRowByAgency(r);
+    byBuilding[id].totalViolations += t;
+    byBuilding[id].hpdViolations += a.hpd;
+    byBuilding[id].dobViolations += a.dob;
+    byBuilding[id].highPriorityHPD += (parseInt(r.highpriority_open_monthly_hpd) || 0);
+  }
+  return Object.values(byBuilding)
+    .sort((a, b) => b.totalViolations - a.totalViolations)
+    .slice(0, limit)
+    .map(r => ({ address: r.address, landlord: r.landlord, borough: r.borough, totalViolations: r.totalViolations, hpdViolations: r.hpdViolations, dobViolations: r.dobViolations, highPriorityHPD: r.highPriorityHPD }));
 }
 
 // ========== PAPE'S COMBINED STATS (for hero section) ==========
