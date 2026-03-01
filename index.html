@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heat Tracker — NYC Housing Crisis Tool</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+
+    /* HEADER */
+    header { background: linear-gradient(135deg, #1a1a2e 0%, #2d1117 50%, #0f3460 100%); padding: 2rem; text-align: center; border-bottom: 3px solid #e94560; }
+    header h1 { font-size: 2.5rem; color: #fff; letter-spacing: 2px; }
+    header h1 span { color: #e94560; }
+    header p { color: #aaa; font-size: 1.1rem; margin-top: 0.5rem; }
+    header .sub { color: #666; font-size: 0.85rem; margin-top: 0.3rem; font-style: italic; }
+
+    /* TABS */
+    .tabs { display: flex; justify-content: center; gap: 0; background: #111; border-bottom: 1px solid #333; }
+    .tab-btn { padding: 1rem 2.5rem; background: none; border: none; color: #888; font-size: 1rem; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
+    .tab-btn:hover { color: #fff; background: #1a1a2e; }
+    .tab-btn.active { color: #e94560; border-bottom-color: #e94560; font-weight: 700; }
+
+    /* SEARCH */
+    #search-section { max-width: 800px; margin: 0 auto; padding: 2rem; }
+    .search-box { background: #1a1a2e; border-radius: 16px; padding: 2.5rem; border: 1px solid #333; text-align: center; }
+    .search-box h2 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #fff; }
+    .search-box p { color: #888; margin-bottom: 1.5rem; }
+    #search-form { display: flex; gap: 0.5rem; max-width: 500px; margin: 0 auto; }
+    #search-input { flex: 1; padding: 14px 18px; border-radius: 10px; border: 2px solid #333; background: #0a0a0a; color: #fff; font-size: 1.1rem; outline: none; transition: border-color 0.2s; }
+    #search-input:focus { border-color: #e94560; }
+    #search-input::placeholder { color: #555; }
+    #search-btn { padding: 14px 28px; border-radius: 10px; border: none; background: #e94560; color: #fff; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+    #search-btn:hover { background: #c0392b; }
+    #search-btn:disabled { background: #555; cursor: wait; }
+    #search-error { color: #e94560; margin-top: 1rem; display: none; }
+    .search-examples { margin-top: 1.5rem; color: #555; font-size: 0.85rem; }
+    .search-examples span { color: #888; cursor: pointer; text-decoration: underline; margin: 0 0.3rem; }
+    .search-examples span:hover { color: #e94560; }
+
+    /* REPORT CARD */
+    #report-card { max-width: 900px; margin: 2rem auto; padding: 0 2rem; }
+    .rc-header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; }
+    .grade-badge { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 900; color: #fff; flex-shrink: 0; box-shadow: 0 0 30px rgba(233,69,96,0.3); }
+    .rc-info h2 { font-size: 1.6rem; color: #fff; }
+    .rc-info .borough { color: #888; font-size: 1rem; }
+    .rc-info .total { color: #e94560; font-size: 0.9rem; margin-top: 0.3rem; }
+    .rc-info .score-text { color: #aaa; font-size: 0.85rem; margin-top: 0.2rem; }
+    .grade-reasons { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; border-left: 4px solid #e94560; margin-bottom: 2rem; }
+    .grade-reasons h3 { color: #e94560; margin-bottom: 0.5rem; font-size: 1rem; }
+    .grade-reasons ul { padding-left: 1.2rem; }
+    .grade-reasons li { color: #ccc; margin: 0.4rem 0; font-size: 0.9rem; line-height: 1.5; }
+
+    /* SECTIONS */
+    .rc-section { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; border: 1px solid #333; margin-bottom: 1.5rem; }
+    .rc-section h3 { font-size: 1.1rem; color: #fff; margin-bottom: 1rem; border-left: 4px solid #e94560; padding-left: 10px; }
+    .rc-section h3.dob { border-color: #f0a500; }
+    .rc-section h3.dhs { border-color: #3498db; }
+    .rc-section canvas { max-height: 280px; }
+
+    /* TABLES */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #e94560; color: #e94560; font-size: 0.8rem; text-transform: uppercase; }
+    td { padding: 8px 10px; border-bottom: 1px solid #222; font-size: 0.85rem; }
+    tr:hover td { background: #16213e; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .open-tag { background: #e9456033; color: #e94560; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+    tr.overdue td { background: #3d0a0a; }
+    tr.slow { color: #e94560; }
+    tr.medium { color: #f0a500; }
+    tr.fast { color: #4ecca3; }
+
+    /* DOB */
+    .rc-section h4 { color: #f0a500; font-size: 0.9rem; margin: 0.8rem 0 0.4rem; }
+    .rc-section ul { padding-left: 1.2rem; }
+    .rc-section li { color: #ccc; font-size: 0.85rem; margin: 0.3rem 0; }
+
+    /* ACTIONS */
+    .action-links { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-top: 1.5rem; }
+    .action-btn { display: block; padding: 14px; border-radius: 10px; text-align: center; text-decoration: none; font-weight: 700; font-size: 0.9rem; transition: transform 0.2s, box-shadow 0.2s; }
+    .action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+    .file-complaint { background: #e94560; color: #fff; }
+    .dob-lookup { background: #f0a500; color: #000; }
+    .hpd-online { background: #3498db; color: #fff; }
+    .know-rights { background: #4ecca3; color: #000; }
+
+    /* CITYWIDE COMPARE */
+    .city-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+    .city-stat { text-align: center; }
+    .city-stat .val { font-size: 1.5rem; font-weight: 800; color: #3498db; }
+    .city-stat .lbl { font-size: 0.8rem; color: #888; margin-top: 0.2rem; }
+
+    /* DASHBOARD */
+    #dashboard-section { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; text-align: center; border: 1px solid #333; transition: transform 0.2s; }
+    .stat-card:hover { transform: translateY(-4px); border-color: #e94560; }
+    .stat-card .number { font-size: 2rem; font-weight: 800; color: #e94560; }
+    .stat-card .label { font-size: 0.85rem; color: #888; margin-top: 0.3rem; }
+    .stat-card .sub { font-size: 0.75rem; color: #555; margin-top: 0.2rem; }
+    .stat-card.dhs .number { color: #f0a500; }
+    .stat-card.nycha .number { color: #9b59b6; }
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+    .chart-box { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; border: 1px solid #333; }
+    .chart-box canvas { max-height: 320px; }
+    .table-box { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; border: 1px solid #333; overflow-x: auto; margin-bottom: 2rem; }
+    .table-box h3 { font-size: 1rem; color: #ccc; margin-bottom: 1rem; }
+    .layer-tag { display: inline-block; font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; font-weight: 700; text-transform: uppercase; }
+    .tag-hpd { background: #e9456033; color: #e94560; }
+    .tag-dhs { background: #f0a50033; color: #f0a500; }
+    .tag-nycha { background: #9b59b633; color: #9b59b6; }
+    .tag-dob { background: #f0a50033; color: #f0a500; }
+
+    /* HIDDEN */
+    .hidden { display: none !important; }
+    #dash-loading { text-align: center; padding: 3rem; color: #888; font-size: 1.1rem; }
+
+    /* FOOTER */
+    footer { text-align: center; padding: 2rem; color: #444; font-size: 0.8rem; border-top: 1px solid #222; margin-top: 3rem; }
+    footer a { color: #e94560; text-decoration: none; }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      header h1 { font-size: 1.8rem; }
+      .hero-stats { grid-template-columns: 1fr 1fr; }
+      .chart-row { grid-template-columns: 1fr; }
+      .action-links { grid-template-columns: 1fr; }
+      .rc-header { flex-direction: column; text-align: center; }
+      .tab-btn { padding: 0.8rem 1.2rem; font-size: 0.85rem; }
+      .city-compare { grid-template-columns: 1fr; }
+      #search-form { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <h1>HEAT <span>TRACKER</span></h1>
+    <p>NYC Housing Maintenance Crisis — A Tenant Tool</p>
+    <div class="sub">Cross-referencing HPD, DOB, DHS & NYCHA data from NYC Open Data</div>
+  </header>
+
+  <!-- TABS -->
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Citywide Dashboard</button>
+    <button class="tab-btn" data-tab="search">Look Up Your Building</button>
+  </nav>
+
+  <!-- ===== SEARCH SECTION ===== -->
+  <div id="search-section" class="hidden">
+    <div class="search-box">
+      <h2>Look Up Any Building</h2>
+      <p>Enter an address to get a full report card — HPD complaints, DOB violations, resolution times, and a letter grade.</p>
+      <form id="search-form">
+        <input type="text" id="search-input" placeholder="e.g. 1000 Grand Concourse" autocomplete="off">
+        <button type="submit" id="search-btn">Look Up</button>
+      </form>
+      <div id="search-error" class="hidden"></div>
+      <div class="search-examples">
+        Try: <span onclick="document.getElementById('search-input').value='1000 GRAND CONCOURSE';document.getElementById('search-form').requestSubmit()">1000 Grand Concourse</span>
+        <span onclick="document.getElementById('search-input').value='100 WEST 142 STREET';document.getElementById('search-form').requestSubmit()">100 West 142 Street</span>
+        <span onclick="document.getElementById('search-input').value='350 EAST 173 STREET';document.getElementById('search-form').requestSubmit()">350 East 173 Street</span>
+      </div>
+    </div>
+
+    <!-- REPORT CARD (hidden until search) -->
+    <div id="report-card" class="hidden">
+
+      <!-- Grade + Address -->
+      <div class="rc-header">
+        <div class="grade-badge" id="rc-grade-letter">—</div>
+        <div class="rc-info">
+          <h2 id="rc-address"></h2>
+          <div class="borough" id="rc-borough"></div>
+          <div class="total" id="rc-total"></div>
+          <div class="score-text" id="rc-grade-score"></div>
+        </div>
+      </div>
+
+      <!-- Grade Reasons -->
+      <div class="grade-reasons">
+        <h3>Why This Grade?</h3>
+        <ul id="rc-grade-reasons"></ul>
+      </div>
+
+      <!-- Heat Winters Chart -->
+      <div class="rc-section">
+        <h3>Heat/Hot Water Complaints by Winter <span class="layer-tag tag-hpd">HPD</span></h3>
+        <canvas id="heat-chart"></canvas>
+      </div>
+
+      <!-- Categories Table -->
+      <div class="rc-section">
+        <h3>Complaint Categories <span class="layer-tag tag-hpd">HPD</span></h3>
+        <table>
+          <thead><tr><th>Category</th><th class="num">Total</th><th class="num">Status</th></tr></thead>
+          <tbody id="rc-categories"></tbody>
+        </table>
+      </div>
+
+      <!-- Resolution Times -->
+      <div class="rc-section">
+        <h3>Avg Resolution Time <span class="layer-tag tag-hpd">HPD</span></h3>
+        <table>
+          <thead><tr><th>Category</th><th class="num">Avg Days</th><th class="num">Sample</th></tr></thead>
+          <tbody id="rc-resolution"></tbody>
+        </table>
+      </div>
+
+      <!-- Open Tickets -->
+      <div id="rc-open-section" class="rc-section hidden">
+        <h3>Currently Open Tickets <span class="layer-tag tag-hpd">HPD</span></h3>
+        <table>
+          <thead><tr><th>Filed</th><th>Category</th><th>Priority</th><th class="num">Waiting</th></tr></thead>
+          <tbody id="rc-open-tickets"></tbody>
+        </table>
+      </div>
+
+      <!-- DOB Cross-Reference -->
+      <div id="rc-dob-section" class="rc-section hidden">
+        <h3 class="dob">Dept. of Buildings Cross-Reference <span class="layer-tag tag-dob">DOB</span></h3>
+        <div id="rc-dob-data"></div>
+      </div>
+
+      <!-- Citywide Comparison -->
+      <div class="rc-section">
+        <h3 class="dhs">Citywide Context</h3>
+        <div class="city-compare">
+          <div class="city-stat">
+            <div class="val" id="rc-city-open">—</div>
+            <div class="lbl">Open HPD tickets citywide</div>
+          </div>
+          <div class="city-stat">
+            <div class="val" id="rc-city-avg">—</div>
+            <div class="lbl">Citywide avg heat resolution</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Links -->
+      <div id="rc-actions" class="action-links"></div>
+
+    </div><!-- /report-card -->
+  </div><!-- /search-section -->
+
+  <!-- ===== DASHBOARD SECTION ===== -->
+  <div id="dashboard-section">
+    <div id="dash-loading">Loading citywide data...</div>
+    <div id="dashboard" class="hidden">
+
+      <!-- Hero Stats -->
+      <div class="hero-stats">
+        <div class="stat-card">
+          <div class="number" id="stat-hpd-open">—</div>
+          <div class="label">Open HPD Tickets</div>
+          <div class="sub">Across all private buildings</div>
+        </div>
+        <div class="stat-card">
+          <div class="number" id="stat-heat-avg">—</div>
+          <div class="label">Avg Heat Resolution</div>
+          <div class="sub">Days to close heat complaint (2023+)</div>
+        </div>
+        <div class="stat-card dhs">
+          <div class="number" id="stat-shelter">—</div>
+          <div class="label">People in DHS Shelters</div>
+          <div class="sub">Latest daily census</div>
+        </div>
+        <div class="stat-card dhs">
+          <div class="number" id="stat-children">—</div>
+          <div class="label">Children in Shelter</div>
+          <div class="sub">One in three is a child</div>
+        </div>
+        <div class="stat-card nycha">
+          <div class="number" id="stat-nycha-viol">—</div>
+          <div class="label">NYCHA Violations</div>
+          <div class="sub">From HPD inspections</div>
+        </div>
+        <div class="stat-card nycha">
+          <div class="number" id="stat-nycha-c">—</div>
+          <div class="label">Class C (Hazardous)</div>
+          <div class="sub">Immediately dangerous to life</div>
+        </div>
+      </div>
+
+      <!-- Charts Row 1: DHS + NYCHA -->
+      <div class="chart-row">
+        <div class="chart-box">
+          <canvas id="dhs-chart"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="nycha-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart Row 2: NYCHA Worst Developments -->
+      <div class="chart-row">
+        <div class="chart-box" style="grid-column: span 2;">
+          <canvas id="nycha-devs-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Shelter Landlords Table -->
+      <div id="shelter-section" class="table-box hidden">
+        <h3>Worst Shelter Landlords (DHS Scorecard) <span class="layer-tag tag-dhs">DHS</span></h3>
+        <table>
+          <thead><tr><th>Landlord</th><th class="num">Buildings</th><th class="num">Open Violations</th></tr></thead>
+          <tbody id="shelter-landlords"></tbody>
+        </table>
+        <div style="color:#555;font-size:0.75rem;margin-top:0.5rem;">Data through Dec 2022 — DHS Shelter Repair Scorecard</div>
+      </div>
+
+    </div><!-- /dashboard -->
+  </div><!-- /dashboard-section -->
+
+  <!-- FOOTER -->
+  <footer>
+    <p>Heat Tracker — Built by Ismael, Beatrice & Pape | Pursuit Hackathon 2026</p>
+    <p>Data: <a href="https://data.cityofnewyork.us" target="_blank">NYC Open Data</a> | HPD (ygpa-z7cr) + DOB (eabe-havv, 3h2n-5cm9) + DHS (k46n-sa2m) + NYCHA (im9z-53hg)</p>
+    <p style="margin-top:0.5rem;">This tool is for tenants. <a href="https://portal.311.nyc.gov" target="_blank">File a complaint at 311</a></p>
+  </footer>
+
+  <!-- SCRIPTS (load order matters) -->
+  <script src="data-ismael.js"></script>
+  <script src="data-pape.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
