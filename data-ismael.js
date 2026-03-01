@@ -19,8 +19,11 @@ async function q(base, params) {
 function parseAddress(input) {
   const s = input.trim().toUpperCase().replace(/\./g, '').replace(/['"]/g, '');
   const match = s.match(/^(\d+[-\w]*)\s+(.+?)(?:,\s*(BRONX|BROOKLYN|MANHATTAN|QUEENS|STATEN ISLAND))?$/);
-  if (!match) return null;
-  return { number: match[1], street: match[2].replace(/\s+/g, ' ').trim(), borough: match[3] || null };
+  if (match) return { number: match[1], street: match[2].replace(/\s+/g, ' ').trim(), borough: match[3] || null };
+  // Fallback: split on first space
+  const i = s.indexOf(' ');
+  if (i > 0) return { number: s.substring(0, i), street: s.substring(i+1).replace(/\s+/g, ' ').trim(), borough: null };
+  return null;
 }
 
 async function searchBuilding(input) {
