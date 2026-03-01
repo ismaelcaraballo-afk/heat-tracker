@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket Tracker — NYC Housing Maintenance Crisis</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+    header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); padding: 2rem; text-align: center; border-bottom: 3px solid #e94560; }
+    header h1 { font-size: 2.5rem; color: #fff; letter-spacing: 2px; }
+    header h1 span { color: #e94560; }
+    header p { color: #aaa; font-size: 1.1rem; margin-top: 0.5rem; }
+    header .sub { color: #666; font-size: 0.85rem; margin-top: 0.3rem; font-style: italic; }
+    .hero-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .stat-card { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; text-align: center; border: 1px solid #333; transition: transform 0.2s; }
+    .stat-card:hover { transform: translateY(-4px); border-color: #e94560; }
+    .stat-card .number { font-size: 2.2rem; font-weight: 800; color: #e94560; }
+    .stat-card .label { font-size: 0.9rem; color: #888; margin-top: 0.3rem; }
+    .stat-card .sub { font-size: 0.75rem; color: #555; margin-top: 0.2rem; }
+    .stat-card.loading .number { color: #555; }
+    section { max-width: 1200px; margin: 2rem auto; padding: 0 2rem; }
+    section h2 { font-size: 1.5rem; margin-bottom: 1rem; color: #fff; border-left: 4px solid #e94560; padding-left: 12px; }
+    section h2.dhs { border-color: #f0a500; }
+    section h2.nycha { border-color: #9b59b6; }
+    section h2.hpd-managed { border-color: #3498db; }
+    .layer-tag { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; font-weight: 700; text-transform: uppercase; }
+    .tag-hpd { background: #e9456033; color: #e94560; }
+    .tag-dhs { background: #f0a50033; color: #f0a500; }
+    .tag-nycha { background: #9b59b633; color: #9b59b6; }
+    .tag-hpd-mgd { background: #3498db33; color: #3498db; }
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+    .chart-box { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; border: 1px solid #333; }
+    .chart-box h3 { font-size: 1rem; color: #ccc; margin-bottom: 1rem; }
+    .chart-box canvas { max-height: 350px; }
+    .table-box { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; border: 1px solid #333; overflow-x: auto; margin-bottom: 2rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e94560; color: #e94560; font-size: 0.85rem; text-transform: uppercase; }
+    td { padding: 10px 12px; border-bottom: 1px solid #222; font-size: 0.9rem; }
+    tr:hover td { background: #16213e; }
+    tr.ancient td { background: #3d0a0a; }
+    tr.old td { background: #2a1a0a; }
+    .bad { color: #e94560; font-weight: 700; }
+    .insight { background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #e94560; border-radius: 12px; padding: 2rem; margin-bottom: 2rem; text-align: center; }
+    .insight.dhs { border-color: #f0a500; }
+    .insight .quote { font-size: 1.4rem; font-style: italic; color: #fff; line-height: 1.6; }
+    .insight .source { font-size: 0.8rem; color: #666; margin-top: 0.5rem; }
+    .compare-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+    .compare-card { background: #1a1a2e; border-radius: 12px; padding: 1.5rem; text-align: center; border: 1px solid #333; }
+    .compare-card .compare-num { font-size: 2rem; font-weight: 800; }
+    .compare-card .compare-label { font-size: 0.9rem; color: #888; margin-top: 0.3rem; }
+    .compare-card .compare-sub { font-size: 0.75rem; color: #555; margin-top: 0.2rem; }
+    .bad-card .compare-num { color: #e94560; }
+    .bad-card { border-color: #e94560; }
+    .warn-card .compare-num { color: #f0a500; }
+    .warn-card { border-color: #f0a500; }
+    .ok-card .compare-num { color: #4ecca3; }
+    .ok-card { border-color: #4ecca3; }
+    .compare-verdict { color: #ccc; text-align: center; font-size: 1rem; line-height: 1.6; padding: 1rem; }
+    .solution-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
+    .sol-card { background: #0f3460; border-radius: 12px; padding: 1.5rem; border: 1px solid #4ecca3; }
+    .sol-card h4 { color: #4ecca3; margin-bottom: 0.5rem; font-size: 1.1rem; }
+    .sol-card p { color: #ccc; font-size: 0.9rem; line-height: 1.5; }
+    .sol-card .sol-stat { margin-top: 0.8rem; font-size: 0.85rem; color: #4ecca3; font-weight: 700; }
+    footer { text-align: center; padding: 2rem; color: #555; font-size: 0.8rem; border-top: 1px solid #222; }
+    footer a { color: #e94560; text-decoration: none; }
+    #status { text-align: center; padding: 1rem; color: #666; font-size: 0.85rem; }
+    #status.error { color: #e94560; }
+    @media (max-width: 768px) { .hero-stats { grid-template-columns: repeat(2, 1fr); } .chart-row, .solution-grid, .compare-row { grid-template-columns: 1fr; } header h1 { font-size: 1.8rem; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TICKET <span>TRACKER</span></h1>
+    <p>88K open repair tickets. 85K people in shelter. The maintenance queue that never ends.</p>
+    <div class="sub">HPD Private Landlords + HPD-Managed Buildings + DHS Shelters + NYCHA Violations</div>
+  </header>
+
+  <div id="status">Loading data from NYC Open Data (4 datasets)...</div>
+
+  <div class="hero-stats">
+    <div class="stat-card loading" id="stat-hpd-open">
+      <div class="number">--</div>
+      <div class="label">HPD Open Tickets</div>
+      <div class="sub">Private landlord complaints</div>
+    </div>
+    <div class="stat-card loading" id="stat-emergency">
+      <div class="number">--</div>
+      <div class="label">Emergency — Still Open</div>
+      <div class="sub">Tagged EMERGENCY, not resolved</div>
+    </div>
+    <div class="stat-card loading" id="stat-shelter">
+      <div class="number">--</div>
+      <div class="label">In Shelter Today</div>
+      <div class="sub">DHS daily census</div>
+    </div>
+    <div class="stat-card loading" id="stat-children">
+      <div class="number">--</div>
+      <div class="label">Children in Shelter</div>
+      <div class="sub">Kids sleeping in the system</div>
+    </div>
+  </div>
+
+  <!-- LAYER 1: HPD Private Landlords -->
+  <section>
+    <h2>How Long Do Repairs Take? <span class="layer-tag tag-hpd">HPD Private</span></h2>
+    <div class="chart-row">
+      <div class="chart-box"><h3>Avg Days to Close by Complaint Type (2023+)</h3><canvas id="chart-avg-type"></canvas></div>
+      <div class="chart-box"><h3>Avg Days by Priority Level</h3><canvas id="chart-avg-priority"></canvas></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="insight">
+      <div class="quote">"An <strong>EMERGENCY</strong> housing complaint in NYC takes <strong>10.5 days</strong> to close. A broken elevator averages <strong>40 days</strong>. These are people living without heat, water, and safe exits."</div>
+      <div class="source">NYC Open Data — HPD Complaints & Problems (ygpa-z7cr) | 15.8M complaints analyzed</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Resolution Time by Borough <span class="layer-tag tag-hpd">HPD Private</span></h2>
+    <div class="chart-row">
+      <div class="chart-box"><h3>Avg Days to Close</h3><canvas id="chart-avg-boro"></canvas></div>
+      <div class="chart-box"><h3>Open Tickets by Complaint Type</h3><canvas id="chart-open-type"></canvas></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The Oldest Open Tickets — Years Without Resolution <span class="layer-tag tag-hpd">HPD Private</span></h2>
+    <div class="table-box">
+      <table id="table-oldest">
+        <thead><tr><th>#</th><th>Days Open</th><th>Filed</th><th>Priority</th><th>Type</th><th>Borough</th><th>Address</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- LAYER 2: HPD-Managed Buildings -->
+  <section>
+    <h2 class="hpd-managed">HPD's Own Buildings — Do They Practice What They Preach? <span class="layer-tag tag-hpd-mgd">HPD-Managed</span></h2>
+    <p style="color:#ccc;margin-bottom:1.5rem">HPD manages ~943 buildings directly (Central Management, 7A receivership, HPD-owned). How do their repair times compare to the private landlords they regulate?</p>
+    <div id="hpd-managed-stats"></div>
+  </section>
+
+  <section>
+    <div class="insight">
+      <div class="quote">"HPD fines private landlords for slow repairs. But HPD's <strong>own buildings take nearly 4x longer</strong> to fix. The regulator is worse than the regulated."</div>
+      <div class="source">Cross-reference: HPD Complaints (ygpa-z7cr) x Buildings Subject to HPD Jurisdiction (kj4p-ruqc)</div>
+    </div>
+  </section>
+
+  <!-- LAYER 3: DHS Shelters -->
+  <section>
+    <h2 class="dhs">Shelter Population — The Queue That Never Shrinks <span class="layer-tag tag-dhs">DHS Shelters</span></h2>
+    <div class="chart-row">
+      <div class="chart-box" style="grid-column: 1 / -1;"><h3>Total Individuals in Shelter (Last 60 Days)</h3><canvas id="chart-shelter"></canvas></div>
+    </div>
+    <div id="dhs-peak"></div>
+  </section>
+
+  <section>
+    <div class="insight dhs">
+      <div class="quote">"<strong>29,880 children</strong> are sleeping in NYC's shelter system tonight. The population nearly doubled from 44K (2021) to 85K+ today. Peak was <strong>89,558</strong> in December 2023."</div>
+      <div class="source">NYC Open Data — DHS Daily Report (k46n-sa2m) | Updated daily</div>
+    </div>
+  </section>
+
+  <!-- LAYER 4: NYCHA Violations -->
+  <section>
+    <h2 class="nycha">NYCHA — When HPD Inspects Public Housing <span class="layer-tag tag-nycha">NYCHA Violations</span></h2>
+    <p style="color:#ccc;margin-bottom:1rem">NYCHA handles its own repairs through Customer Care / MyNYCHA app — those work orders are NOT in public data. But when HPD inspectors visit NYCHA buildings, they find violations. 2,273 documented so far.</p>
+    <div class="chart-row">
+      <div class="chart-box"><h3>Worst NYCHA Developments</h3><canvas id="chart-nycha-dev"></canvas></div>
+      <div class="chart-box"><h3>Hazard Classification</h3><canvas id="chart-nycha-class"></canvas></div>
+    </div>
+    <p style="color:#888;font-size:0.85rem;text-align:center;margin-top:-0.5rem">Class A = Non-hazardous | Class B = Hazardous | Class C = Immediately hazardous (vacate)</p>
+  </section>
+
+  <!-- SOLUTION -->
+  <section>
+    <h2>The Solution: Triage, Transparency, Accountability</h2>
+    <p style="color:#ccc;margin-bottom:1.5rem;font-size:1.1rem;text-align:center">
+      The data exists. The backlog is documented. Three interventions to clear the queue.
+    </p>
+    <div class="solution-grid">
+      <div class="sol-card">
+        <h4>Severity-Based Triage Queue</h4>
+        <p>Tickets open 1+ year should auto-escalate to emergency status. No heat in winter, no elevator for disabled residents — these cannot sit in queue behind paint complaints. Weight by vulnerability: elderly, children, disabled.</p>
+        <div class="sol-stat">15 tickets open since 2020 — 5 years and counting</div>
+      </div>
+      <div class="sol-card">
+        <h4>Fix HPD's Own Buildings First</h4>
+        <p>HPD-managed buildings take 53.9 days vs 14.3 for private. The city cannot credibly fine landlords while its own buildings are 4x worse. Fund a dedicated rapid-repair team for the 943 HPD-managed buildings.</p>
+        <div class="sol-stat">943 buildings, 53.9 days avg — lead by example</div>
+      </div>
+      <div class="sol-card">
+        <h4>Public Accountability Dashboard</h4>
+        <p>Real-time public dashboard showing every open ticket, days waiting, building owner. Tenants check before signing leases. Reporters track worst landlords. Sunlight is the best disinfectant.</p>
+        <div class="sol-stat">88K open tickets = 88K families waiting</div>
+      </div>
+    </div>
+    <div style="margin-top:2rem;padding:1.5rem;background:#0a0a0a;border-radius:10px;border:1px solid #4ecca3">
+      <h4 style="color:#4ecca3;margin-bottom:.5rem">The Full Picture</h4>
+      <p style="color:#ccc;line-height:1.8">
+        <strong>Private landlords:</strong> 88K open HPD tickets. Emergencies take 10+ days. Some open since 2020.<br>
+        <strong>HPD's own buildings:</strong> 53.9-day average — 4x worse than the landlords they regulate.<br>
+        <strong>DHS Shelters:</strong> 85,770 people (29,880 children) in shelter tonight. Near all-time high.<br>
+        <strong>NYCHA:</strong> 2,273 violations found by HPD inspectors. Actual repair queue hidden — not in public data.<br><br>
+        <strong style="color:#4ecca3">Every layer of NYC housing maintenance is failing. The data proves it. The question is who will act on it.</strong>
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="insight">
+      <div class="quote">"88,000 open repair tickets. 85,000 people in shelter. 29,880 of them children. The city's housing maintenance system is not slow — it is <strong>broken</strong>."</div>
+      <div class="source">Data: NYC Open Data (4 datasets) | Built at Pursuit Hackathon 2026</div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Ticket Tracker — Built with NYC Open Data at Pursuit Hackathon</p>
+    <p>Datasets: <a href="https://data.cityofnewyork.us/Housing-Development/Housing-Maintenance-Code-Complaints-and-Problems/ygpa-z7cr">HPD Complaints (15.8M)</a> |
+    <a href="https://data.cityofnewyork.us/Housing-Development/Buildings-Subject-to-HPD-Jurisdiction/kj4p-ruqc">HPD Buildings</a> |
+    <a href="https://data.cityofnewyork.us/Social-Services/DHS-Daily-Report/k46n-sa2m">DHS Daily Report</a> |
+    <a href="https://data.cityofnewyork.us/Housing-Development/Housing-Maintenance-Code-Violations-NYCHA-properties/im9z-53hg">NYCHA Violations</a></p>
+    <p>No API keys required. All data is public.</p>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
