@@ -60,7 +60,7 @@ async function getHPDReport(streetName, houseNumber, borough) {
     }),
     q(HPD_API, {
       "$select": "date_extract_y(received_date) as year, count(*) as total",
-      "$where": `${where} AND major_category='HEAT/HOT WATER'`,
+      "$where": `${where} AND (major_category='HEAT/HOT WATER' OR major_category='HEATING')`,
       "$group": "year", "$order": "year DESC", "$limit": 10
     }),
     q(HPD_API, {
@@ -160,7 +160,7 @@ function gradeBuilding(hpd, dobComplaints, dobViolations) {
   if (hpd.open.length >= 5) { score -= 25; reasons.push(`${hpd.open.length} unresolved HPD tickets right now`); }
   else if (hpd.open.length >= 1) { score -= 10; reasons.push(`${hpd.open.length} open HPD ticket(s)`); }
 
-  const heatRes = hpd.resolution.find(r => r.category === 'HEAT/HOT WATER');
+  const heatRes = hpd.resolution.find(r => r.category === 'HEAT/HOT WATER' || r.category === 'HEATING');
   if (heatRes && parseFloat(heatRes.avgDays) > 30) { score -= 20; reasons.push(`Heat repairs avg ${heatRes.avgDays} days (city avg ~8 days)`); }
   else if (heatRes && parseFloat(heatRes.avgDays) > 14) { score -= 10; reasons.push(`Heat repairs avg ${heatRes.avgDays} days`); }
 
@@ -191,7 +191,7 @@ async function getCitywideContext() {
   const [hpdOpen, hpdHeatAvg] = await Promise.all([
     q(HPD_API, { "$select": "count(*) as total", "$where": "complaint_status='OPEN'" }),
     q(HPD_API, { "$select": "avg(date_diff_d(complaint_status_date,received_date)) as avg_days",
-      "$where": "complaint_status='CLOSE' AND received_date>='2023-01-01' AND major_category='HEAT/HOT WATER'" })
+      "$where": "complaint_status='CLOSE' AND received_date>='2023-01-01' AND major_category IN('HEAT/HOT WATER','HEATING')" })
   ]);
   return {
     totalOpen: parseInt(hpdOpen[0]?.total || 0),
