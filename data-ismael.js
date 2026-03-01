@@ -17,17 +17,17 @@ async function q(base, params) {
 // ========== ADDRESS SEARCH ==========
 
 function parseAddress(input) {
-  const s = input.trim().toUpperCase().replace(/\./g, '');
+  const s = input.trim().toUpperCase().replace(/\./g, '').replace(/['"]/g, '');
   const match = s.match(/^(\d+[-\w]*)\s+(.+?)(?:,\s*(BRONX|BROOKLYN|MANHATTAN|QUEENS|STATEN ISLAND))?$/);
   if (!match) return null;
-  return { number: match[1], street: match[2], borough: match[3] || null };
+  return { number: match[1], street: match[2].replace(/\s+/g, ' ').trim(), borough: match[3] || null };
 }
 
 async function searchBuilding(input) {
   const addr = parseAddress(input);
   if (!addr) return { error: "Enter address like: 1000 Grand Concourse" };
 
-  const where = `street_name='${addr.street}' AND house_number='${addr.number}'` +
+  const where = `upper(street_name)='${addr.street}' AND house_number='${addr.number}'` +
     (addr.borough ? ` AND borough='${addr.borough}'` : '');
 
   const check = await q(HPD_API, {
@@ -49,7 +49,7 @@ async function searchBuilding(input) {
 // ========== HPD BUILDING REPORT ==========
 
 async function getHPDReport(streetName, houseNumber, borough) {
-  const where = `street_name='${streetName}' AND house_number='${houseNumber}'` +
+  const where = `upper(street_name)='${streetName.toUpperCase()}' AND house_number='${houseNumber}'` +
     (borough ? ` AND borough='${borough}'` : '');
 
   const [byCategory, heatByYear, avgDays, openTickets, recent] = await Promise.all([
